@@ -1,0 +1,38 @@
+version: '3'
+services:                                          # 各コンテナ(サービス)
+  db:                                               # MySQLのコンテナ 「db」と命名
+    build: containers/mysql                          # Dockerファイルのパス
+    env_file:                                        # 環境変数
+      - ./environments/common.env                     # 各コンテナ共通
+      - ./environments/db.env                         # DB接続用MySQL関連
+    volumes:                                         # 永続化
+      - ../volumes/db/data:/var/lib/mysql             # MySQLのデータ
+    ports:                                           # 開放ポート
+      - 3306:3306                                     # ホストOSのWorkBenchでDBを参照する目的
+  app:                                              # Spring Bootのコンテナ 「app」と命名
+    build: containers/spring                         # Dockerファイルのパス
+    env_file:                                        # 環境変数
+      - ./environments/common.env                     # 各コンテナ共通
+      - ./environments/db.env                         # DB接続用MySQL関連
+    # 実行するコマンド(後述)
+    command: ./mvnw clean spring-boot:run -Dspring-boot.run.jvmArguments="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=*:5005"
+    volumes:                                         # 永続化
+      - ../volumes/app:/app                           # Spring Bootのプロジェクト
+      - ../volumes/app/.m2:/root/.m2                  # Mavenのローカルリポジトリ
+    ports:                                           # 開放ポート
+      - 8080:8080                                     # ホストOSからNginxを通さずTomcatを直接参照する目的
+      - 5005:5005                                     # IDEでリモートデバッグする目的
+    depends_on:                                      # 起動する順番
+      - db                                            # 「db」の後で起動
+  web:                                              # Nginxのコンテナ 「web」と命名
+    build: containers/nginx                          # Dockerファイルのパス
+    env_file:                                       # 環境変数
+      - ./environments/common.env                    # 各コンテナ共通
+    volumes:                                        # 永続化
+      - ../volumes/web/static:/usr/share/nginx/www/  # 静的ファイル (Spring Bootプロジェクトのresouce/staticには配置しない)
+      - ../volumes/web/ssl:/etc/nginx/cert/          # SSL証明書
+      - ../volumes/web/log:/var/log/nginx/           # Nginxのログ
+    ports:                                          # 開放ポート
+      - 443:443                                      # HTTPS この開発環境はHTTPSのみ想定
+    depends_on:                                     # 起動する順番
+      - app                                          # 「app」の後で起動
